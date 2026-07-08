@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "_comment": "Copy this file to infra/parameters.json (gitignored) and fill in values. NEVER put real passwords in a tracked file. deploy.ps1 prompts for the two secure passwords so you can leave them out here.",
+  "_sizeNote": "VM sizes vary by subscription offer and region. If deploy fails with SkuNotAvailable/NotAvailableForSubscription, pick sizes that are available: az vm list-skus -l <region> --resource-type virtualMachines --query \"[?!(restrictions)].name\" -o tsv",
+  "parameters": {
+    "namePrefix": {
+      "value": "wwidemo"
+    },
+    "adminUsername": {
+      "value": "azureadmin"
+    },
+    "allowedRdpSourceIp": {
+      "value": "REPLACE_WITH_YOUR_PUBLIC_IP/32"
+    },
+    "jumpboxVmSize": {
+      "value": "Standard_D2as_v6"
+    },
+    "sqlVmSize": {
+      "value": "Standard_E4as_v6"
+    },
+    "sqlImageSku": {
+      "value": "standard-gen2"
+    },
+    "sqlServerLicenseType": {
+      "value": "PAYG"
+    },
+    "sqlAuthLogin": {
+      "value": "demodba"
+    }
+  }
+}

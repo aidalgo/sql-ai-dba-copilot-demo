@@ -1,0 +1,52 @@
+# Database backups (never commit the WideWorldImporters backup ~120 MB)
+*.bak
+*.bacpac
+*.trn
+
+# Local parameter files that may contain secrets — only the example is tracked
+infra/parameters.json
+infra/*.local.json
+*.parameters.local.json
+
+# Infrastructure-as-Code build output (Bicep compiles to an ARM JSON template)
+infra/main.json
+
+# Secrets / credentials
+*.pfx
+*.key
+*.pem
+.env
+.env.*
+secrets.*
+
+# Azure / tooling
+.azure/
+*.azurePubxml
+
+# PowerShell transcripts and logs
+*.log
+artifacts/
+downloads/
+
+# Temp files
+*.tmp
+*.temp
+
+# OS noise — macOS (dev box)
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# OS noise — Windows (SQL / jumpbox VMs)
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editor noise
+.vscode/
+.idea/
+*.swp
