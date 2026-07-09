@@ -15,41 +15,61 @@ as extended properties** on the database and its objects:
 the `CONSTITUTION.md` extended property, creates the low-privilege investigation
 user, and adds the object-level `AGENTS.md` properties.
 
-## Execution identity: `agentExecuteAsUser`
+## Execution identity and least privilege
 
-The YAML front matter pins the identity Copilot runs SQL under:
+By default the constitution is installed **body-only** — there is **no**
+`agentExecuteAsUser` front matter. Copilot in SSMS has no separate permissions; it
+runs generated SQL **under the login you connect SSMS with**, and SQL Server
+permission enforcement (not Copilot, not the Agent Mode approval prompt) is the
+security boundary. **The guardrail is simply to connect with a least-privilege
+login.**
 
-```yaml
----
-agentExecuteAsUser: GHCP_DB_User
----
-```
-
-When set, SSMS Copilot runs generated SQL via `EXECUTE AS USER = 'GHCP_DB_User'`,
-a **read-only, low-privilege** database user. This is the real guardrail: even if
-a prompt asks for a change, `GHCP_DB_User` lacks permission to make it. For the
-impersonation to work, the **signed-in login** running Copilot must have
-`IMPERSONATE` on `GHCP_DB_User` (the installer grants this to the current user).
-
-`GHCP_DB_User` is granted exactly:
+`scripts/sql/15-install-copilot-constitution.sql` creates **`GHCP_DB_User`** to
+*model* such a principal. It is granted exactly:
 - `SELECT` on the `Demo`, `Sales`, `Warehouse`, and `Application` schemas
 - `VIEW DATABASE STATE` (required to read `sys.query_store_*` and other DMVs)
 - `EXECUTE` on the `Demo` schema (so it can run the read-only demo procedures)
 
-It is **not** granted INSERT/UPDATE/DELETE/ALTER/DROP/CREATE.
+It is **not** granted INSERT/UPDATE/DELETE/ALTER/DROP/CREATE. You can demonstrate
+the boundary directly:
+
+```sql
+EXECUTE AS USER = 'GHCP_DB_User';
+SELECT TOP (1) * FROM Demo.LargeInvoiceFact;      -- allowed (read)
+UPDATE Demo.LargeInvoiceFact SET Quantity = 0;    -- blocked: no permission
+REVERT;
+```
+
+### Optional corner case: pin Copilot to a fixed identity (`agentExecuteAsUser`)
+
+If you want Copilot to always run as **one fixed identity regardless of who is
+connected**, add an `agentExecuteAsUser` value to the YAML front matter of the
+constitution. SSMS then runs every Copilot query via `EXECUTE AS` for that
+identity, and the signed-in login needs `IMPERSONATE` on it.
+
+```yaml
+---
+agentExecuteAsUser: GHCP_Login
+
+---
+```
+
+Use a **SQL login**, not a `WITHOUT LOGIN` database user: `EXECUTE AS USER` on a
+database user yields a database-scoped token with no server context, which makes
+Copilot fail to initialize (*"GitHub Copilot in SSMS does not have support for
+this connection context"*). A low-privilege **login** keeps a server-scoped token
+and initializes correctly. This is a corner case — for most demos, connecting with
+a least-privilege login is simpler and is the recommended model. A commented
+template is at the end of `scripts/sql/15-install-copilot-constitution.sql`.
 
 ---
 
 ## CONSTITUTION.md content (installed verbatim)
 
-> The block below — including the YAML front matter — is what gets stored as the
-> `CONSTITUTION.md` database extended property.
+> The block below is what gets stored as the `CONSTITUTION.md` database extended
+> property (installed **body-only**, without `agentExecuteAsUser` front matter).
 
 ```markdown
----
-agentExecuteAsUser: GHCP_DB_User
----
-
 # Database constitution — AI-assisted DBA investigation (WideWorldImporters demo)
 
 You are assisting a Database Administrator who is investigating SQL Server
@@ -84,9 +104,9 @@ senior DBA.
    validation, rollback.
 
 ## Hard guardrails
-- You run as `GHCP_DB_User`, a low-privilege read-only user. If an action is
-  blocked by permissions, report it and suggest the manual step — do not attempt
-  to escalate privileges.
+- You run under the connected DBA login, which should be a least-privilege
+  principal. If an action is blocked by permissions, report it and suggest the
+  manual step — do not attempt to escalate privileges.
 - Approvals in Agent Mode are not a security boundary; SQL permissions are.
 - This is a non-production demo database. Still, treat every recommendation as if
   it were going to production: review, test, validate, and keep a rollback.

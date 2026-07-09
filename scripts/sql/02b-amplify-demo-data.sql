@@ -80,7 +80,12 @@ BEGIN
     RAISERROR(@msg, 0, 1) WITH NOWAIT;   -- stream progress immediately
 END;
 
+-- Compute the distinct-year count into a scalar first: a subquery cannot be used
+-- directly as a CONCAT argument (Msg 1046: only scalar expressions are allowed).
+DECLARE @distinctYears int =
+    (SELECT COUNT(DISTINCT YEAR(InvoiceDate)) FROM Demo.LargeInvoiceFact);
+
 PRINT CONCAT('[OK]  Demo.LargeInvoiceFact now has ', @current, ' rows across ',
-             (SELECT COUNT(DISTINCT YEAR(InvoiceDate)) FROM Demo.LargeInvoiceFact), ' distinct years.');
+             @distinctYears, ' distinct years.');
 PRINT 'Next: 03-create-demo-procedures.sql';
 GO

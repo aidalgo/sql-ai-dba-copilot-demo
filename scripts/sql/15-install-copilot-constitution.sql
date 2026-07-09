@@ -3,14 +3,24 @@
 
    Purpose : Configure SSMS GitHub Copilot for this database the *native* way:
                1. Create GHCP_DB_User -- a low-privilege, read-only user that
-                  Copilot runs SQL as (via the agentExecuteAsUser front matter).
+                  MODELS least privilege for AI-assisted investigation.
                2. Grant it least-privilege read access (+ VIEW DATABASE STATE so
                   it can read Query Store DMVs).
-               3. Grant the current login IMPERSONATE on GHCP_DB_User so SSMS can
-                  EXECUTE AS that user.
-               4. Install the database-level CONSTITUTION.md extended property.
+               3. Grant the current login IMPERSONATE on GHCP_DB_User (only needed
+                  for the OPTIONAL execution pin -- see section 7 at the end).
+               4. Install the database-level CONSTITUTION.md extended property
+                  (BODY ONLY -- no agentExecuteAsUser, so Copilot runs under the
+                  login you connect SSMS with).
                5. Install object-level AGENTS.md extended properties on the demo
                   table and procedures.
+
+   Least privilege : Copilot in SSMS has NO separate permissions -- it runs SQL
+             under the login you connect with, and SQL Server permission
+             enforcement (not Copilot, not the Agent Mode approval prompt) is the
+             security boundary. So connect SSMS with a least-privilege login for
+             investigation; GHCP_DB_User models exactly such a principal. Pinning
+             Copilot to one FIXED identity via agentExecuteAsUser is an optional
+             corner case documented in section 7.
 
    Run as  : db_owner (or a login with CREATE USER, GRANT, and ALTER on the demo
              objects). Run this ONCE per demo database.
@@ -53,10 +63,10 @@ PRINT '[OK]  Granted least-privilege read access to GHCP_DB_User.';
 GO
 
 /* ---------------------------------------------------------------------------
-   3) Let the CURRENT login impersonate GHCP_DB_User (needed for EXECUTE AS).
-      sysadmin/dbo can already impersonate, so only grant for non-dbo users.
-      To enable another investigator, grant their database user too (template
-      at the bottom of this file).
+   3) Let the CURRENT login impersonate GHCP_DB_User. This is ONLY needed if you
+      enable the OPTIONAL execution pin in section 7 (the default body-only
+      constitution does not use EXECUTE AS). sysadmin/dbo can already impersonate,
+      so this only grants for non-dbo users.
    --------------------------------------------------------------------------- */
 IF USER_NAME() <> N'dbo'
 BEGIN
@@ -70,12 +80,22 @@ GO
 
 /* ---------------------------------------------------------------------------
    4) Database-level CONSTITUTION.md (highest-precedence Copilot instructions).
-   --------------------------------------------------------------------------- */
-DECLARE @constitution nvarchar(max) = N'---
-agentExecuteAsUser: GHCP_DB_User
----
+      BODY ONLY: no agentExecuteAsUser front matter, so Copilot runs under the
+      login you connect SSMS with. Connect with a least-privilege login -- SQL
+      Server permissions, not Copilot, are the security boundary.
 
-# Database constitution — AI-assisted DBA investigation (WideWorldImporters demo)
+      REFERENCE (talking point) -- how you WOULD pin Copilot to a specific user:
+      add YAML front matter to the TOP of the @constitution value below, e.g.
+          ---
+          agentExecuteAsUser: <a low-privilege SQL LOGIN>
+          ---
+      Use a SQL LOGIN (not a WITHOUT LOGIN database user), and grant the connected
+      login IMPERSONATE on it. We leave it out on purpose so Copilot runs as the
+      least-privilege login you connect with. Full runnable template in section 7.
+   --------------------------------------------------------------------------- */
+-- NOTE: sp_addextendedproperty's @value is sql_variant, which cannot hold
+-- nvarchar(max) (Msg 206). Keep these docs within nvarchar(4000) / 8000 bytes.
+DECLARE @constitution nvarchar(4000) = N'# Database constitution — AI-assisted DBA investigation (WideWorldImporters demo)
 
 You are assisting a Database Administrator who is investigating SQL Server
 performance using **Query Store as the source of truth**. Behave like a careful,
@@ -109,9 +129,9 @@ senior DBA.
    validation, rollback.
 
 ## Hard guardrails
-- You run as GHCP_DB_User, a low-privilege read-only user. If an action is blocked
-  by permissions, report it and suggest the manual step — do not attempt to
-  escalate privileges.
+- You run under the connected DBA login, which should be a least-privilege
+  principal. If an action is blocked by permissions, report it and suggest the
+  manual step — do not attempt to escalate privileges.
 - Approvals in Agent Mode are not a security boundary; SQL permissions are.
 - This is a non-production demo database. Still, treat every recommendation as if
   it were going to production: review, test, validate, and keep a rollback.';
@@ -127,7 +147,7 @@ GO
    --------------------------------------------------------------------------- */
 
 -- 5a) Demo.LargeInvoiceFact (table)
-DECLARE @factDoc nvarchar(max) = N'# Demo.LargeInvoiceFact
+DECLARE @factDoc nvarchar(4000) = N'# Demo.LargeInvoiceFact
 
 Amplified, denormalized invoice fact table used by the performance demo (~10M
 rows), projected from WideWorldImporters Sales.Invoices / Sales.InvoiceLines with
@@ -155,7 +175,7 @@ END
 GO
 
 -- 5b) Procedures: pick the right note by name suffix.
-DECLARE @regDoc nvarchar(max) = N'# Demo.usp_*_Regressed
+DECLARE @regDoc nvarchar(4000) = N'# Demo.usp_*_Regressed
 
 Intentionally REGRESSED variant used to demonstrate a performance problem. It uses
 a non-sargable predicate (YEAR(InvoiceDate) = @Year) which forces a full scan. The
@@ -163,13 +183,13 @@ corrected logic lives in the matching _Fixed procedure (sargable date range). Wh
 asked to fix, recommend the sargable rewrite plus the supporting index — not
 partitioning.';
 
-DECLARE @goodDoc nvarchar(max) = N'# Demo.usp_*_Baseline / Demo.usp_*_Fixed
+DECLARE @goodDoc nvarchar(4000) = N'# Demo.usp_*_Baseline / Demo.usp_*_Fixed
 
 Healthy variant: uses a sargable half-open date range so the optimizer can seek on
 IX_Demo_LargeInvoiceFact_InvoiceDate. Use this as the reference for what "good"
 looks like when comparing Query Store metrics.';
 
-DECLARE @procName sysname, @doc nvarchar(max);
+DECLARE @procName sysname, @doc nvarchar(4000);
 DECLARE proc_cur CURSOR LOCAL FAST_FORWARD FOR
     SELECT name FROM sys.objects
     WHERE schema_id = SCHEMA_ID(N'Demo') AND type = N'P' AND name LIKE N'usp[_]%';
@@ -219,6 +239,50 @@ ORDER BY scope, object_name;
 GO
 
 PRINT 'Done. Connect SSMS Copilot to WideWorldImporters to pick up these instructions.';
-PRINT 'To enable another investigator login, map it to a database user and run:';
-PRINT '   GRANT IMPERSONATE ON USER::GHCP_DB_User TO [<that_database_user>];';
+PRINT 'Copilot runs under the login you connect with -- use a least-privilege login.';
+GO
+
+/* ---------------------------------------------------------------------------
+   7) OPTIONAL (corner case): pin Copilot execution to a SPECIFIC identity.
+   ---------------------------------------------------------------------------
+   By default (section 4) Copilot runs under whoever is connected, and SQL Server
+   permissions are the security boundary. That is the recommended model: connect
+   SSMS with a least-privilege login for AI-assisted investigation.
+
+   Only in the corner case where you want Copilot pinned to ONE fixed identity no
+   matter who is connected (for example a shared, audited "AI investigator"
+   account) do you add an agentExecuteAsUser value to the constitution front
+   matter. SSMS then wraps every Copilot query in EXECUTE AS for that identity.
+
+   IMPORTANT: use a SQL LOGIN, not a WITHOUT LOGIN database user. EXECUTE AS on a
+   database user produces a database-scoped token with no server context, which
+   makes Copilot fail to initialize ("GitHub Copilot in SSMS does not have support
+   for this connection context") on current SSMS builds. A low-privilege LOGIN
+   keeps a server-scoped token, so Copilot initializes correctly. The connected
+   login also needs IMPERSONATE on that identity.
+
+   To enable the pin, run something like this (uncomment and adjust):
+
+   -- CREATE LOGIN GHCP_Login WITH PASSWORD = N'<strong-password>';
+   -- CREATE USER  GHCP_Login FOR LOGIN GHCP_Login;
+   -- GRANT SELECT ON SCHEMA::Demo        TO GHCP_Login;
+   -- GRANT SELECT ON SCHEMA::Sales       TO GHCP_Login;
+   -- GRANT SELECT ON SCHEMA::Warehouse   TO GHCP_Login;
+   -- GRANT SELECT ON SCHEMA::Application TO GHCP_Login;
+   -- GRANT EXECUTE ON SCHEMA::Demo       TO GHCP_Login;
+   -- GRANT VIEW DATABASE STATE           TO GHCP_Login;
+   -- GRANT IMPERSONATE ON USER::GHCP_Login TO [<your_connected_login_or_user>];
+   --
+   -- Then reinstall the constitution WITH the front matter (note the blank line
+   -- before the closing --- , matching the documented format):
+   --
+   -- DECLARE @pinned nvarchar(4000) = N'---
+   -- agentExecuteAsUser: GHCP_Login
+   --
+   -- ---
+   -- <paste the same constitution body from section 4 here>';
+   -- IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 0 AND name = N'CONSTITUTION.md')
+   --     EXEC sys.sp_dropextendedproperty @name = N'CONSTITUTION.md';
+   -- EXEC sys.sp_addextendedproperty @name = N'CONSTITUTION.md', @value = @pinned;
+   --------------------------------------------------------------------------- */
 GO

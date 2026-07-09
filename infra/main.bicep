@@ -153,6 +153,20 @@ resource sqlNsg 'Microsoft.Network/networkSecurityGroups@2023-11-01' = {
         }
       }
       {
+        name: 'Allow-WinRM-From-JumpboxSubnet'
+        properties: {
+          priority: 1020
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: jumpboxSubnetPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '5985'
+          description: 'WinRM/PS-Remoting (TCP 5985) from the jumpbox subnet only - used by 02-copy-backup-to-sqlvm.ps1.'
+        }
+      }
+      {
         name: 'Deny-All-Inbound-From-Internet'
         properties: {
           priority: 4096

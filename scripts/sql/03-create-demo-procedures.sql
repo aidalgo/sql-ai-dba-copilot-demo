@@ -89,7 +89,8 @@ BEGIN
     FROM Demo.LargeInvoiceFact AS f
     WHERE f.CustomerID = @CustomerID
       AND f.InvoiceDate >= @start
-      AND f.InvoiceDate <  @end;          -- SARGABLE again
+      AND f.InvoiceDate <  @end           -- SARGABLE again
+    GROUP BY f.CustomerID;
 END;
 GO
 

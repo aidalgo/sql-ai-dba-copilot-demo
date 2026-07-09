@@ -283,7 +283,7 @@ idempotent and heavily commented):
 | 02b | [02b-amplify-demo-data.sql](scripts/sql/02b-amplify-demo-data.sql) | **Enhanced mode**: amplify `LargeInvoiceFact` to `@TargetRows` (~10M) |
 | 03 | [03-create-demo-procedures.sql](scripts/sql/03-create-demo-procedures.sql) | 6 procs: `_Baseline` / `_Regressed` / `_Fixed` × 2 query families |
 | 04 | [04-create-baseline-indexes.sql](scripts/sql/04-create-baseline-indexes.sql) | `IX_Demo_*` supporting indexes + `UPDATE STATISTICS` |
-| 15 | [15-install-copilot-constitution.sql](scripts/sql/15-install-copilot-constitution.sql) | low-priv `GHCP_DB_User`, `CONSTITUTION.md` + `AGENTS.md` instructions |
+| 15 | [15-install-copilot-constitution.sql](scripts/sql/15-install-copilot-constitution.sql) | low-priv `GHCP_DB_User` (least-privilege model), body-only `CONSTITUTION.md` + `AGENTS.md` instructions |
 
 > **Standard vs Enhanced mode.** The demo works on restored WWI as-is (Standard).
 > For a **stronger, more obvious** regression on a larger VM, run **02b** to
@@ -400,13 +400,38 @@ This demo makes the guardrails **real**, not just verbal:
   to WideWorldImporters. (Explanation:
   [copilot/ssms-database-constitution.md](copilot/ssms-database-constitution.md),
   [copilot/ssms-database-instructions.md](copilot/ssms-database-instructions.md).)
-- **A real permission boundary.** The constitution's `agentExecuteAsUser:
-  GHCP_DB_User` front matter pins Copilot's SQL execution to **`GHCP_DB_User`**, a
-  **read-only** user with only `SELECT` + `VIEW DATABASE STATE` + `EXECUTE` on
-  `Demo`. Even if a prompt asks for a change, the user **cannot** perform DML/DDL.
+- **Least privilege is the real boundary.** By default, Copilot in SSMS runs SQL
+  **under the login you connect with** — it has *no* separate permissions and *no*
+  elevated access. So the security control is **which login you connect SSMS
+  with**: use a least-privilege one. Script 15 creates **`GHCP_DB_User`**, a
+  read-only principal with only `SELECT` + `EXECUTE ON Demo` + `VIEW DATABASE
+  STATE` (no `INSERT/UPDATE/DELETE/ALTER/DROP/CREATE`), to *model* exactly such an
+  investigator. Show the boundary live:
+  ```sql
+  EXECUTE AS USER = 'GHCP_DB_User';
+  SELECT TOP (1) * FROM Demo.LargeInvoiceFact;      -- allowed (read)
+  UPDATE Demo.LargeInvoiceFact SET Quantity = 0;    -- blocked: no permission
+  REVERT;
+  ```
+  Even if a prompt asks for a change, a least-privilege login simply **cannot**
+  perform DML/DDL — SQL Server blocks it.
 - **Approvals in Agent Mode.** Approve only **read-only** investigation steps
   first. Show that *approvals are a workflow control* — **SQL permissions are the
   security control**.
+
+> **Optional corner case — pin Copilot to a specific user.** The constitution is
+> installed **body-only** by default (Copilot runs as whoever is connected). If you
+> want Copilot to *always* run as one fixed identity regardless of who connects,
+> add an `agentExecuteAsUser: <login>` line to the constitution's YAML front
+> matter; SSMS then runs every Copilot query via `EXECUTE AS` for that identity.
+> Use a **SQL login**, not a `WITHOUT LOGIN` database user — a database user gives
+> a database-scoped token with no server context and makes Copilot fail to
+> initialize (*"GitHub Copilot in SSMS does not have support for this connection
+> context"*), whereas a login keeps server scope. The connected login also needs
+> `IMPERSONATE` on that identity. A commented template is at the end of
+> [15-install-copilot-constitution.sql](scripts/sql/15-install-copilot-constitution.sql).
+> For most demos, connecting with a least-privilege login is simpler and is the
+> recommended model.
 
 > Copilot/Agent Mode should **not** be treated as a security boundary. SQL Server
 > permissions are the real control. See [Appendix B](#appendix-b--security-and-guardrails).
