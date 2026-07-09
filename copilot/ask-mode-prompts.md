@@ -62,6 +62,20 @@ Explain what this stored procedure does and identify possible performance concer
 Rewrite this query to be more sargable without changing the business logic.
 ```
 
+## Before prompt 3: capture an execution plan
+
+A rewrite is just *text* — an execution plan only exists once you **run** a query.
+Generate one before the next prompt:
+
+1. Press **Ctrl+M** ("Include Actual Execution Plan").
+2. Run the **regressed** procedure once (**F5**):
+   ```sql
+   EXEC Demo.usp_GetRegionalSalesByYear_Regressed @Year = 2015;
+   ```
+3. Click the **Execution plan** tab next to *Results* and keep it in the active
+   window so Copilot has it as context. This is the *slow* plan (a full **scan**)
+   that prompt 3 explains.
+
 ## Interpret an execution plan
 ```
 Based on this execution plan, explain the likely bottleneck in simple DBA terms.
@@ -86,10 +100,18 @@ Review this index recommendation and tell me what else I should validate before 
    @Year` as non-sargable.
 3. Paste prompt **2 (sargable rewrite)** — compare its suggestion to
    `Demo.usp_GetRegionalSalesByYear_Fixed` (they should match in spirit).
-4. Turn on the plan (**Ctrl+M**), run one call
-   (`EXEC Demo.usp_GetRegionalSalesByYear_Regressed @Year = 2015;`), then paste
-   prompt **3 (execution plan)** to translate scan vs seek into plain language.
-5. Use prompts **4 (partitioning)** and **5 (index)** to show Copilot reasoning
+4. **Capture an execution plan** — a rewrite produces none, so generate one: press
+   **Ctrl+M**, then run the regressed proc with **F5**
+   (`EXEC Demo.usp_GetRegionalSalesByYear_Regressed @Year = 2015;`). An **Execution
+   plan** tab appears showing a full **scan**.
+5. With that plan in the active window, paste prompt **3 (execution plan)** to
+   translate the scan into plain language.
+6. *(Optional — closes the loop)* Run the **fixed** proc the same way to watch the
+   plan flip to a **seek**
+   (`EXEC Demo.usp_GetRegionalSalesByYear_Fixed @Year = 2015;`). If the index was
+   dropped earlier, recreate it first with Section B of
+   `scripts/sql/10-apply-fix-options.sql`.
+7. Use prompts **4 (partitioning)** and **5 (index)** to show Copilot reasoning
    from evidence instead of jumping to a fix.
 
 ## What each prompt should produce (and what to say)

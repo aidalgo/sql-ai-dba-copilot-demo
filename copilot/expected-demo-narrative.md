@@ -133,3 +133,10 @@ connected to WideWorldImporters.
   query window is on `master` — switch it to WideWorldImporters.
 - **Keep the raw report open** next to Copilot and cross-check live — that contrast
   (AI summary vs raw evidence) is the most persuasive moment.
+
+## Going further (optional Act 2)
+
+If the room wants more, [advanced-scenarios.md](advanced-scenarios.md) layers on a
+subtle implicit-conversion bug (and optional parameter sniffing), ad-hoc NL-to-SQL,
+a "catch the wrong answer" trust moment, and Copilot filing a ticket via an MCP
+tool — all after the main demo, with cleanup included.

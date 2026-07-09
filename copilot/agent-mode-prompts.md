@@ -128,3 +128,9 @@ Assess whether partitioning is justified for this workload. Use evidence from ro
   and re-run the workload after the fix (script 12).
 - **"Does this work on-prem?"** Yes — only the connection target differs; SSMS +
   Copilot run from the DBA workstation/jump box.
+
+## Going further
+
+For harder problems (implicit conversion, parameter sniffing), ad-hoc NL-to-SQL, a
+"catch the wrong answer" moment, and using an **MCP** tool to file a ticket from
+Agent Mode, see [advanced-scenarios.md](advanced-scenarios.md) (optional Act 2).

@@ -1,9 +1,12 @@
 # SSMS database instructions — CONSTITUTION.md (source of truth)
 
-SSMS GitHub Copilot does **not** read this repository's `.github/skills/*` files.
-Those skills are a portable runbook for humans and other Copilot surfaces. To
-customize Copilot **inside SSMS**, SQL Server uses **database instructions stored
-as extended properties** on the database and its objects:
+This repository's `.github/skills/*` files are **Agent skills** — task runbooks
+that GitHub Copilot in SSMS (**22.7+, Agent Mode**) discovers automatically by
+their `description`, either when the repo folder is open in SSMS or when you add
+them as *personal* skills. (Beginner step-by-step: [skills-demo-guide.md](skills-demo-guide.md).)
+They are **separate from** the **database instructions** covered here, which SQL
+Server stores as **extended properties** on the database and its objects and
+applies to both Ask and Agent mode whenever you connect — no repo folder required:
 
 - A **database-level** extended property named **`CONSTITUTION.md`** — the
   highest-precedence instruction set for the whole database. Copilot loads it for

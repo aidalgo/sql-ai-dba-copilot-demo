@@ -383,11 +383,22 @@ The three Agent Skills shape this behavior:
 [index-recommendation-validation](.github/skills/index-recommendation-validation/SKILL.md),
 [partitioning-assessment](.github/skills/partitioning-assessment/SKILL.md).
 
+> New to Copilot **skills** in SSMS? [copilot/skills-demo-guide.md](copilot/skills-demo-guide.md)
+> is a beginner step-by-step (including what "open a folder in SSMS" means and how
+> to demo a skill live). Requires SSMS 22.7+ and Agent Mode.
+
 ## 20. Prompts to copy/paste into SSMS Copilot
 
 A single copy/paste cheat sheet tying prompts to each step lives in
 [copilot/ssms-demo-prompts.md](copilot/ssms-demo-prompts.md). The presenter script
 (what to *say*) is in [copilot/expected-demo-narrative.md](copilot/expected-demo-narrative.md).
+
+> **Optional "Act 2" — advanced scenarios.** Once the main flow lands, the optional
+> [copilot/advanced-scenarios.md](copilot/advanced-scenarios.md) adds harder,
+> higher-impact demos: a subtle **implicit-conversion** bug (and optional
+> **parameter sniffing**), ad-hoc **NL-to-SQL**, a "**catch the wrong answer**"
+> trust moment, and Copilot filing a ticket via an **MCP** tool. They run after the
+> main demo and clean up after themselves.
 
 ## 21. How to show human approval and guardrails
 
@@ -608,7 +619,7 @@ sql-ai-dba-copilot-demo/
   scripts/
     powershell/          00..06 drivers + 99-reset + _Common.ps1
     sql/                 00..15 demo scripts + 99-reset
-  copilot/               ask/agent/demo prompts, narrative, SSMS DB instructions
+  copilot/               ask/agent/demo prompts, narrative, advanced scenarios, skills guide, SSMS DB instructions
   .github/skills/        query-store-regression-review, index-recommendation-validation,
                          partitioning-assessment
 ```
