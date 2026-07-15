@@ -1,38 +1,65 @@
 # Advanced scenarios (optional "Act 2")
 
-The main demo proves Copilot *fits the DBA workflow* on a common, easy-to-spot
-problem. These optional add-ons make it prove Copilot is also **powerful and
-broad**: a genuinely subtle bug, ad-hoc query writing, a "catch the wrong answer"
-trust moment, and Copilot reaching **beyond the database** via an MCP tool.
+The main demo establishes the DBA control loop on a deterministic performance
+regression. These optional scenarios extend that architecture across subtler plan
+problems, ad-hoc query generation, recommendation review, and an external MCP
+tool. Choose scenarios according to the investigation goal and the operational
+dependencies you can validate.
 
 Run these **after** the main demo, in the same SSMS session, connected to
 **WideWorldImporters**. They build on the state the main demo already created
 (the ~10M-row `Demo.LargeInvoiceFact`, its indexes, Query Store history, and the
 installed `CONSTITUTION.md` / skills).
 
-> Everything here is **additive and reversible**. New objects live in the `Demo`
-> schema and are removed by the [Cleanup](#cleanup) block at the end — the main
-> demo objects and data are untouched.
+> The SQL scenarios are additive and reversible: new database objects live in the
+> `Demo` schema and are removed by the [SQL cleanup](#sql-cleanup) block. MCP
+> scenarios can also create a local file or GitHub issue; those external effects
+> require separate cleanup.
+
+## Place in the story
+
+- **Stage:** extend the canonical DBA exercise with harder use cases.
+- **Enter from:** the completed
+  [reviewed-fix and Query Store validation loop](../README.md#apply-the-reviewed-fix-and-validate)
+  and the core Ask and Agent exercises.
+- **This document owns:** optional capability scenarios, their dependencies,
+  side effects, and cleanup.
+- **Continue with:** the [skills and agents catalog](../.github/README.md), then
+  the [README adoption guidance](../README.md#adopting-the-pattern)
+  to discuss how the patterns map to a customer environment.
+
+## Choose a scenario
+
+| Scenario | Architectural capability | Mode | Determinism | Typical time | Side effects |
+| --- | --- | --- | --- | --- | --- |
+| **A1: implicit conversion** | Plan-based root-cause analysis beyond obvious syntax | Ask or Agent | High | 10–15 min | Adds a column, index, and two procedures |
+| **A2: parameter sniffing** | Evidence-based comparison of parameter-sensitive plans | Agent | Medium; depends on skew and cache state | 10–15 min | Adds one procedure; can add hints if applied |
+| **B: natural language to SQL** | Schema-aware query drafting under database guidance | Ask | High | 5–10 min | Adds a procedure only if the draft is executed |
+| **C: recommendation review** | Rejecting expensive fixes with evidence | Agent | High | 5–10 min | None when kept review-only |
+| **D: MCP handoff** | Extending the investigation into an operations workflow | Agent | Depends on MCP setup | 5–10 min | Creates a local file or GitHub issue |
+
+For a first extension, use A1. Rehearse A2 and D against the exact environment
+before running them.
 
 ## Contents
-- [If you're presenting this and you're *not* a DBA](#if-youre-presenting-this-and-youre-not-a-dba)
+- [How to run these scenarios](#how-to-run-these-scenarios)
 - [Prerequisites](#prerequisites)
-- [Scenario A — A genuinely hard problem](#scenario-a--a-genuinely-hard-problem)
-  - [A1 — Implicit conversion (recommended, deterministic)](#a1--implicit-conversion-recommended-deterministic)
-  - [A2 — Parameter sniffing (optional, more advanced)](#a2--parameter-sniffing-optional-more-advanced)
-- [Scenario B — Ad-hoc NL-to-SQL (breadth)](#scenario-b--ad-hoc-nl-to-sql-breadth)
-- [Scenario C — Catch the wrong answer (trust)](#scenario-c--catch-the-wrong-answer-trust)
-- [Scenario D — Reach beyond the database with an MCP tool](#scenario-d--reach-beyond-the-database-with-an-mcp-tool)
+- [Scenario A, a genuinely hard problem](#scenario-a-a-genuinely-hard-problem)
+  - [A1: implicit conversion (recommended, deterministic)](#a1-implicit-conversion-recommended-deterministic)
+  - [A2: parameter sniffing (optional, more advanced)](#a2-parameter-sniffing-optional-more-advanced)
+- [Scenario B: ad-hoc NL-to-SQL (breadth)](#scenario-b-ad-hoc-nl-to-sql-breadth)
+- [Scenario C: catch the wrong answer (trust)](#scenario-c-catch-the-wrong-answer-trust)
+- [Scenario D: reach beyond the database with an MCP tool](#scenario-d-reach-beyond-the-database-with-an-mcp-tool)
 - [Going deeper: other DBA domains](#going-deeper-other-dba-domains)
 - [Cleanup](#cleanup)
 
-## If you're presenting this and you're *not* a DBA
+## How to run these scenarios
 
-Same job as the main demo: **run the setup block, paste the prompt, narrate.** The
-difference is these problems are subtler, so let Copilot do the explaining and use
-the "what to say" lines to frame *why it matters*. Rehearse each once before going
-live — especially Scenario A2 (parameter sniffing) and Scenario D (MCP), which have
-more moving parts.
+Run the setup block, paste the prompt, and compare Copilot's result with the
+expected evidence. These problems are subtler than the core regression, so verify
+the plan and metrics before accepting the explanation. Test each scenario once
+before a shared exercise, especially Scenario A2 (parameter sniffing) and Scenario
+D (MCP), which have more moving parts.
 
 ## Prerequisites
 
@@ -44,13 +71,13 @@ more moving parts.
 
 ---
 
-## Scenario A — A genuinely hard problem
+## Scenario A, a genuinely hard problem
 
-The main demo's `YEAR(InvoiceDate)` is a "layup" a senior DBA spots instantly.
-These are the subtle bugs that actually cost people hours — and where Copilot
-reading the execution plan earns its keep.
+The main demo's `YEAR(InvoiceDate)` pattern is intentionally easy to recognize.
+The following scenarios require closer inspection of data types, estimates, and
+plan behavior, which better demonstrates plan-based investigation.
 
-### A1 — Implicit conversion (recommended, deterministic)
+### A1: implicit conversion (recommended, deterministic)
 
 **The trap:** a developer passes a customer *number* (`int`) into a lookup whose
 column is a *code* (`varchar`). Because `int` outranks `varchar` in SQL Server's
@@ -127,13 +154,13 @@ Investigate why Demo.usp_GetInvoicesByCustomerRef_BadType is slow. Use Query Sto
 - **Expect:** Copilot names the **implicit conversion** (`int` parameter vs
   `varchar` column), explains it forces a column-side `CONVERT_IMPLICIT` that
   blocks the seek, and proposes matching the parameter type (the `_GoodType` shape).
-- **Say:** "This is the kind of bug that hides in plain sight — the query *looks*
-  fine and even returns the right answer. Copilot found it in the plan in seconds;
-  most people would stare at it for an hour."
+- **Interpretation:** the query returns the correct result, but the type mismatch
+  changes how SQL Server can access the data. The execution plan exposes that
+  hidden cost.
 - **Why it matters:** it proves Copilot handles *subtle* problems, not just the
-  obvious `YEAR()` one — the difficulty jump the main demo is missing.
+  obvious `YEAR()` pattern, while the plan remains the evidence.
 
-### A2 — Parameter sniffing (optional, more advanced)
+### A2: parameter sniffing (optional, more advanced)
 
 **The trap:** a procedure's best plan depends on the *parameter value*. SQL compiles
 and caches a plan for the **first** value it sees ("sniffs") and reuses it — great
@@ -183,13 +210,13 @@ Demo.usp_CustomerInvoices_Sniff runs fast for some customers and slow for others
   `OPTIMIZE FOR UNKNOWN`, `OPTIMIZE FOR (@CustomerID = <typical>)`, a **Query Store
   hint** (no code change — see `scripts/sql/10-apply-fix-options.sql` Section E), or
   **plan forcing** (Section D).
-- **Say:** "Same code, opposite performance depending on the input — this is the
-  problem juniors can't name. Copilot names it *and* gives the menu, including the
-  no-code-change options a DBA reaches for in production."
+- **Interpretation:** the same code can have opposite performance characteristics
+  for different inputs. Copilot should identify parameter sensitivity and compare
+  both code-change and no-code-change options.
 
 ---
 
-## Scenario B — Ad-hoc NL-to-SQL (breadth)
+## Scenario B: ad-hoc NL-to-SQL (breadth)
 
 No setup. Shows Copilot as a **query-writing** partner, not just a tuner — the
 everyday value a DBA/analyst gets. Use Ask Mode, connected to WideWorldImporters.
@@ -208,34 +235,34 @@ Turn this into a stored procedure Demo.usp_TopCustomersByYear that takes @Year i
   `Application.Cities` on `CityID` for the city name, uses a half-open date range
   (not `YEAR()`), and adds the `HAVING COUNT(*) > 50` and the parameterized proc on
   request.
-- **Say:** "Notice it discovered the join to the city dimension itself, and it kept
-  the date filter sargable *without being asked* — it learned that from the
-  instructions we installed. And it iterates: I refined the request three times in
-  plain English."
+- **Interpretation:** Copilot discovers the join to the city dimension and keeps
+  the date filter sargable based on the installed instructions. The DBA can refine
+  the draft incrementally in natural language before reviewing the generated SQL.
 - **Do:** review the generated proc before running it — the discipline still applies.
 
 ---
 
-## Scenario C — Catch the wrong answer (trust)
+## Scenario C: catch the wrong answer (trust)
 
-The most persuasive moment for a skeptical audience isn't Copilot being right — it's
-watching a DBA **reject a plausible-but-wrong AI-style suggestion with evidence.**
-We hand Copilot a shiny bad idea and let the installed skills + Query Store shoot it
-down.
+This scenario shows a DBA **rejecting a plausible but poorly supported suggestion
+with evidence**. The proposed index and partitioning change sound reasonable in
+isolation; the installed skills require a workload, overlap, and operational-cost
+review before reaching a decision.
 
-**Over-eager index (Ask Mode):**
+**Over-eager index (Agent mode):**
 ```
 A teammate wants to speed up the slow reporting query by adding this index. Should we create it? What's wrong with it?
 CREATE NONCLUSTERED INDEX IX_Everything ON Demo.LargeInvoiceFact
     (CustomerID, CityID, StockItemID, InvoiceDate, Quantity, UnitPrice, LineTotal, SalespersonPersonID);
 ```
-- **Expect** (guided by the `index-recommendation-validation` skill): it flags the
+- **Expect** (guided by the `index-recommendation-validation` skill in Agent
+  mode): it flags the
   index as **near-duplicate** of existing indexes, **far too wide** (write + storage
   overhead), the **wrong leading column** for a date-range predicate, and — the
   kicker — that **no index fixes a non-sargable or implicit-conversion query** in the
   first place.
 
-**"Just partition it" (Ask or Agent):**
+**"Just partition it" (Agent mode):**
 ```
 Someone suggests partitioning Demo.LargeInvoiceFact by year to fix the slow date queries. Is that the right fix here, and what evidence would you need before recommending it?
 ```
@@ -243,13 +270,13 @@ Someone suggests partitioning Demo.LargeInvoiceFact by year to fix the slow date
   the right primary fix; the sargable rewrite + supporting index is. It asks for row
   counts, access patterns, retention/maintenance, and index alignment first.
 
-- **Say:** "The first idea is often the wrong idea. The database's own instructions
-  and Query Store keep the AI honest — it talked us *out* of an expensive change and
-  back to the simple, correct one. That's the guardrail working."
+- **Decision point:** treat the recommendation as a hypothesis. The team-owned
+  skill requires the agent to compare it with existing indexes, workload evidence,
+  and operational cost before the DBA accepts or rejects it.
 
 ---
 
-## Scenario D — Reach beyond the database with an MCP tool
+## Scenario D: reach beyond the database with an MCP tool
 
 Agent Mode can use **MCP servers** to act outside SQL Server — here, to **file a
 ticket** from the investigation findings. This shows Copilot fitting into the real
@@ -257,7 +284,7 @@ ops workflow, not just the query window.
 
 > Only **Agent Mode** supports MCP. Newly added MCP tools are **disabled by
 > default** — you must enable them in the **Tools** panel of the Copilot chat.
-> Rehearse this once before presenting, and have a fallback (below).
+> Test this once before the exercise, and have a fallback (below).
 
 Pick **one** server:
 
@@ -265,8 +292,9 @@ Pick **one** server:
 A free, official server that writes the "ticket" as a local Markdown file. No
 external account; fully offline.
 
-- **Prereq:** Node.js LTS on the jumpbox (`winget install OpenJS.NodeJS.LTS`) and a
-  folder, e.g. `C:\Demo\tickets`.
+- **Prereq:** Node.js LTS on the jumpbox (`winget install OpenJS.NodeJS.LTS`),
+  outbound package-registry access for the first `npx` acquisition unless the
+  package is already cached, and a folder such as `C:\Demo\tickets`.
 - **Add it** — in the Copilot chat, **Tools** icon → green **+** → **Add custom MCP
   server**, choose **stdio**, and set:
   - Command: `npx`
@@ -315,12 +343,12 @@ Using the GitHub tool, open an issue in the aidalgo/sql-ai-dba-copilot-demo repo
 
 - **Expect:** Agent calls the MCP tool (you approve it) and creates the ticket —
   file or issue — then returns the path/URL.
-- **Say:** "The same assistant that read Query Store just filed the ticket for the
-  team. It reaches beyond the database into our workflow — still through an approval,
-  still under our control."
-- **Fallback (if MCP misbehaves live):** show the Tools panel with the server added,
-  then paste a pre-written ticket. The point — Copilot reaching into your ops
-  tooling — still lands.
+- **Control check:** the same assistant that read Query Store reaches beyond the
+  database only through an approved MCP action and remains subject to the tool's
+  permissions.
+- **Fallback:** if MCP is unavailable, inspect the enabled tool configuration and
+  use a pre-written ticket to review the intended handoff without creating an
+  external side effect.
 
 ---
 
@@ -398,6 +426,17 @@ ops questions your way.
 ---
 
 ## Cleanup
+
+### External cleanup
+
+- **Filesystem MCP:** delete `C:\Demo\tickets\DBA-Findings-implicit-conversion.md`
+  if the Agent created it.
+- **GitHub MCP:** close or delete the demo issue according to the repository's
+  issue-retention policy.
+- Remove or disable the demo MCP server configuration if it should not remain
+  available after the exercise.
+
+### SQL cleanup
 
 Removes only the advanced-scenario objects. The main demo (fact data, base indexes,
 base procedures, Query Store history, constitution) stays intact.

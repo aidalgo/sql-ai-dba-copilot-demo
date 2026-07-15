@@ -5,24 +5,38 @@ Mode can run multi-step investigations and propose actions, pausing for your
 approval. Connect to the **WideWorldImporters** database on the SQL Server VM
 first.
 
+## Place in the story
+
+- **Stage:** continue the same DBA investigation as a multi-step Agent exercise.
+- **Enter from:** the [Ask mode explanation](ask-mode-prompts.md) and the raw
+  Query Store regression report.
+- **This document owns:** the full Agent mode prompts, approval behavior,
+  execution context, and expected DBA review output.
+- **Continue with:** the [database guidance](database-instructions.md),
+  [skills guide](skills-demo-guide.md), the README
+  [guardrail model](../README.md#guardrails-and-execution-identity), and the
+  [reviewed-fix validation flow](../README.md#apply-the-reviewed-fix-and-validate).
+- **For a live run:** use the condensed [one-page prompt sheet](ssms-demo-prompts.md)
+  and return here for approval, context, and output details.
+
 > Guardrails reminder: Approvals in Agent Mode are a convenience, **not** a
 > security boundary. The connected login's SQL permissions are the real control.
-> For the demo, connect with the low-privilege investigation identity (see
-> `copilot/ssms-database-constitution.md` and
-> `scripts/sql/15-install-copilot-constitution.sql`) and approve only read-only
-> steps at first.
+> This demo installs a body-only constitution, so Copilot uses the account
+> connected in SSMS. `GHCP_DB_User` illustrates a least-privilege permission set
+> separately; it is not the default live execution identity. See
+> [database-instructions.md](database-instructions.md) and approve only reviewed,
+> read-only steps in this flow.
 
-## If you're presenting this and you're *not* a DBA
+## How to use this stage
 
-Ask Mode answers one question at a time. **Agent Mode** is the upgrade: you give it
-a goal ("investigate why this regressed") and it runs a **chain** of read-only
-steps by itself — querying Query Store, comparing time windows, assembling a
+Ask Mode answers one question at a time. **Agent Mode** continues the same DBA
+workflow from a goal ("investigate why this regressed") and runs a **chain** of
+read-only steps — querying Query Store, comparing time windows, and assembling a
 findings table — **pausing for your approval** before each step.
 
-Your story:
-> "Same DBA workflow, but Agent Mode does the legwork across several steps. It
-> still asks permission, and it still can't do anything the connected login isn't
-> allowed to do."
+> **Core takeaway:** Agent Mode performs the same DBA workflow across several
+> steps. It still asks for approval and cannot do anything the connected login is
+> not permitted to do.
 
 ## Ask vs Agent — the one-line difference
 
@@ -34,19 +48,22 @@ Your story:
 
 When Agent Mode wants to run SQL, an **approval prompt** shows the exact statement:
 
-- **Approve** read-only steps (`SELECT ...` against `sys.query_store_*` and other
-  DMVs) — that's the investigation.
+- Use **Allow once** for reviewed read-only steps (`SELECT ...` against
+  `sys.query_store_*` and other DMVs) — that is the investigation.
 - If it ever proposes a change (`CREATE/ALTER/DROP/UPDATE ...`), **don't approve it
   live** — that's your cue: *"here the DBA takes over and applies it manually in
   test."*
-- Even if you *did* approve a change, the **least-privilege login would still block
-  it**. Approvals are workflow; **permissions** are security.
+- Agent mode is `READ_ONLY` by default in SSMS, and this demo keeps the
+  investigation read-only. Independently, the connected account's SQL permissions
+  determine what SQL Server authorizes. Approvals are workflow; **permissions**
+  are enforcement.
 
 ## Before you start
 1. Confirm **WideWorldImporters** exists and Query Store is on (or run
    `scripts/sql/01-enable-query-store.sql`).
 2. Open Copilot chat, switch the mode selector to **Agent**.
-3. Confirm the chat's database context is **WideWorldImporters** (not `master`).
+3. Include **WideWorldImporters** and the server in the prompt. Agent mode does
+  not inherit the active query editor's connection automatically.
 4. Keep `scripts/sql/09-query-store-regression-report.sql` open to cross-check.
 
 ## 1. Investigate the regression (read-only)
@@ -58,6 +75,10 @@ In the WideWorldImporters database on this server, investigate why query perform
 ```
 Compare the baseline and regressed workload windows in Query Store. Identify the top queries with increased duration, CPU, and logical reads. Include query_id, plan_id, likely cause, and recommended next action.
 ```
+
+The demo uses separate `_Baseline` and `_Regressed` procedures. Pair them by
+logical procedure family and report each phase's `query_id` and `plan_id` rather
+than treating them as one Query Store identity.
 
 ## 3. Analyze the worst query (no changes yet)
 ```
@@ -93,36 +114,38 @@ Assess whether partitioning is justified for this workload. Use evidence from ro
 6. Prompt **6** to show responsible partitioning analysis (it should recommend the
    query rewrite + index first, not partitioning).
 
-## What each prompt should produce (and what to say)
+## Expected output and DBA validation
 
 - **1 — Investigate.** *Expect:* several approved read-only Query Store queries,
   then a DBA review table (query, `query_id`, `plan_id`, metric deltas, likely
-  cause). *Say:* "I gave it a goal, not steps — watch it choose the views and ask
-  before each."
+  cause). *Control check:* Agent Mode should choose the relevant views from the
+  stated goal and request approval before each action.
 - **2 — Compare windows.** *Expect:* big increases in duration/CPU/logical reads
-  and a **plan change (seek → scan)**. *Say:* "The AI summary and the raw report
-  (script 09) agree — evidence, not vibes." Ratios are often **10×–100×+**; stress
-  it's the *relative* change that matters, not an absolute benchmark.
+  and a **plan-shape difference (seek versus scan)** across the paired procedure
+  variants. Each variant has its own `query_id` and `plan_id`. *Validation:* the
+  AI summary and raw report (script 09) should agree because both use the same
+  evidence. Ratios are often **10×–100×+**; the *relative* change matters, not an
+  absolute benchmark.
 - **3 — Analyze options.** *Expect:* it lands on **sargable rewrite + restore the
   index** as the simplest safe fix; plan forcing/hints/partitioning treated as
-  heavier. *Say:* "It knows the whole toolbox but recommends the least-risky fix."
+  heavier. *Decision point:* prefer the lowest-risk option supported by evidence.
 - **4 — Remediation plan.** *Expect:* each option with risk, benefit, validation,
-  and **rollback**. *Say:* "Rollback is a first-class step — that's production
-  thinking."
+  and **rollback**. *Control check:* rollback must be a first-class step.
 - **5 — Review-only T-SQL.** *Expect:* the fix as text (sargable proc +
-  `CREATE INDEX` + `UPDATE STATISTICS`), not executed. *Say:* "The AI drafted it;
-  the human applies it."
+  `CREATE INDEX` + `UPDATE STATISTICS`), not executed. *Control check:* Copilot
+  drafts the change; the DBA reviews and applies it.
 - **6 — Partitioning.** *Expect:* concludes partitioning is **not** justified here,
-  pointing back to rewrite + index. *Say:* "It won't reach for the fancy tool when
-  the simple fix wins."
+  pointing back to rewrite + index. *Decision point:* do not introduce
+  partitioning when the simpler fix resolves the measured problem.
 
-## Likely questions from a DBA audience (crisp answers)
+## Likely DBA questions
 
-- **"Can it change my database?"** Only if it proposes a change, you approve it,
-  *and* the connected login has permission. We keep it read-only and least-priv.
+- **"Can it change my database?"** Agent mode can perform changes when write tools
+  are enabled, the action is approved, and the execution identity has permission.
+  This demo keeps the investigation read-only and applies the fix manually.
 - **"So approvals are the security control?"** No — approvals are a workflow
   checkpoint; **SQL permissions** are the security control.
-- **"Is Agent Mode GA?"** Preview in SSMS 22.7+. The read-only investigation is the
+- **"Is Agent mode GA?"** Preview in SSMS 22.7+. The read-only investigation is the
   safe, compelling part to show.
 - **"What if the analysis is wrong?"** Validate against the raw report (script 09)
   and re-run the workload after the fix (script 12).

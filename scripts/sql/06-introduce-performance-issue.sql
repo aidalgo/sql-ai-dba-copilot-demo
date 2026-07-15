@@ -5,7 +5,7 @@
              supporting date index. Combined with the _Regressed (non-sargable)
              procedures, the demo queries now scan all ~10M rows on every call.
 
-   THE NARRATIVE (what to say while running the demo):
+   REGRESSION MECHANISM:
      "A recent release did two unfortunate things at once:
         1. A developer 'optimized' a report query and accidentally changed a
            sargable date range (InvoiceDate >= @start AND < @end) into a

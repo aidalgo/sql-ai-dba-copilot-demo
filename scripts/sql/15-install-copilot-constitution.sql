@@ -15,12 +15,13 @@
                   table and procedures.
 
    Least privilege : Copilot in SSMS has NO separate permissions -- it runs SQL
-             under the login you connect with, and SQL Server permission
+             under the account you connect with, and SQL Server permission
              enforcement (not Copilot, not the Agent Mode approval prompt) is the
-             security boundary. So connect SSMS with a least-privilege login for
-             investigation; GHCP_DB_User models exactly such a principal. Pinning
-             Copilot to one FIXED identity via agentExecuteAsUser is an optional
-             corner case documented in section 7.
+             security boundary. GHCP_DB_User is an illustrative database user for
+             a direct permission test; the body-only constitution does not switch
+             the live Copilot session to it. Customer adoption should use a
+             dedicated least-privilege identity. Pinning Copilot to one fixed
+             identity via agentExecuteAsUser is an optional pattern in section 7.
 
    Run as  : db_owner (or a login with CREATE USER, GRANT, and ALTER on the demo
              objects). Run this ONCE per demo database.
@@ -29,8 +30,8 @@
    Idempotent : Re-runnable; drops-then-adds the extended properties and skips the
              user/grants if already present.
 
-   See copilot/ssms-database-constitution.md and ssms-database-instructions.md for
-   the human-readable explanation and the exact text installed below.
+   See copilot/database-instructions.md for the human-readable architecture,
+   execution-context explanation, and the exact installation source below.
    ============================================================================= */
 SET NOCOUNT ON;
 USE WideWorldImporters;
@@ -81,17 +82,18 @@ GO
 /* ---------------------------------------------------------------------------
    4) Database-level CONSTITUTION.md (highest-precedence Copilot instructions).
       BODY ONLY: no agentExecuteAsUser front matter, so Copilot runs under the
-      login you connect SSMS with. Connect with a least-privilege login -- SQL
-      Server permissions, not Copilot, are the security boundary.
+      account you connect SSMS with. In this demo, GHCP_DB_User is tested
+      separately to illustrate least privilege. SQL Server permissions, not
+      Copilot, are the security boundary.
 
-      REFERENCE (talking point) -- how you WOULD pin Copilot to a specific user:
+      IMPLEMENTATION REFERENCE -- how you WOULD pin Copilot to a specific user:
       add YAML front matter to the TOP of the @constitution value below, e.g.
           ---
-          agentExecuteAsUser: <a low-privilege SQL LOGIN>
+           agentExecuteAsUser: <a low-privilege database user or SQL login>
           ---
-      Use a SQL LOGIN (not a WITHOUT LOGIN database user), and grant the connected
-      login IMPERSONATE on it. We leave it out on purpose so Copilot runs as the
-      least-privilege login you connect with. Full runnable template in section 7.
+        Grant the connected account IMPERSONATE on that identity. We leave it out on
+        purpose so the default connected-account execution model remains visible.
+        See section 7 and copilot/database-instructions.md before enabling it.
    --------------------------------------------------------------------------- */
 -- NOTE: sp_addextendedproperty's @value is sql_variant, which cannot hold
 -- nvarchar(max) (Msg 206). Keep these docs within nvarchar(4000) / 8000 bytes.
@@ -246,20 +248,20 @@ GO
    7) OPTIONAL (corner case): pin Copilot execution to a SPECIFIC identity.
    ---------------------------------------------------------------------------
    By default (section 4) Copilot runs under whoever is connected, and SQL Server
-   permissions are the security boundary. That is the recommended model: connect
-   SSMS with a least-privilege login for AI-assisted investigation.
+   permissions are the security boundary. The demo keeps that default visible and
+   uses GHCP_DB_User only for the direct permission test. In a customer design,
+   use a dedicated least-privilege connected or pinned identity.
 
    Only in the corner case where you want Copilot pinned to ONE fixed identity no
    matter who is connected (for example a shared, audited "AI investigator"
    account) do you add an agentExecuteAsUser value to the constitution front
    matter. SSMS then wraps every Copilot query in EXECUTE AS for that identity.
 
-   IMPORTANT: use a SQL LOGIN, not a WITHOUT LOGIN database user. EXECUTE AS on a
-   database user produces a database-scoped token with no server context, which
-   makes Copilot fail to initialize ("GitHub Copilot in SSMS does not have support
-   for this connection context") on current SSMS builds. A low-privilege LOGIN
-   keeps a server-scoped token, so Copilot initializes correctly. The connected
-   login also needs IMPERSONATE on that identity.
+   Microsoft documents both a database user and SQL login as supported identity
+   types. Some earlier SSMS builds or environments produced connection-context
+   errors with WITHOUT LOGIN users, so test the exact SSMS build and
+   authentication model before choosing one. The connected account also needs
+   IMPERSONATE permission on the selected identity.
 
    To enable the pin, run something like this (uncomment and adjust):
 

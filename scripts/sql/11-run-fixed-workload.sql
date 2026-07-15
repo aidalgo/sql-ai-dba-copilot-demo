@@ -15,6 +15,12 @@ SET NOCOUNT ON;
 USE WideWorldImporters;
 GO
 
+IF NOT EXISTS (SELECT 1 FROM Demo.LargeInvoiceFact)
+BEGIN
+    THROW 51000, 'Demo.LargeInvoiceFact is empty. Run 02b-amplify-demo-data.sql before the workload.', 1;
+END;
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes
                WHERE name = N'IX_Demo_LargeInvoiceFact_InvoiceDate'
                  AND object_id = OBJECT_ID(N'Demo.LargeInvoiceFact'))

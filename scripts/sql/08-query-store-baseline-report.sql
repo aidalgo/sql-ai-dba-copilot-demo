@@ -55,7 +55,11 @@ JOIN sys.query_store_query_text           AS qt  ON qt.query_text_id = q.query_t
 JOIN sys.query_store_plan                 AS p   ON p.query_id = q.query_id
 JOIN sys.query_store_runtime_stats        AS rs  ON rs.plan_id = p.plan_id
 JOIN sys.query_store_runtime_stats_interval AS rsi ON rsi.runtime_stats_interval_id = rs.runtime_stats_interval_id
-WHERE q.object_id IN (SELECT object_id FROM sys.objects WHERE schema_id = SCHEMA_ID('Demo') AND type = 'P')
+JOIN sys.objects                          AS o   ON o.object_id = q.object_id
+WHERE o.schema_id = SCHEMA_ID(N'Demo')
+    AND o.type = N'P'
+    AND RIGHT(o.name, 9) = N'_Baseline'
+    AND qt.query_sql_text LIKE N'%Demo.LargeInvoiceFact%'
   AND rsi.start_time < @endOff
   AND rsi.end_time   > @startOff
 GROUP BY q.object_id, q.query_id, p.plan_id, p.is_forced_plan

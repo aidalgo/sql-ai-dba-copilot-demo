@@ -5,22 +5,35 @@ read-only: it explains and rewrites text/queries but cannot run modification
 statements. Have the relevant query, stored procedure, or execution plan open (or
 selected) so Copilot has context.
 
+## Place in the story
+
+- **Stage:** the first hands-on Copilot stage in the canonical DBA investigation.
+- **Enter from:** the README
+  [baseline and regression evidence](../README.md#capture-baseline-and-regression-evidence).
+- **This document owns:** the full Ask mode prompts, UI context, and expected
+  interpretation.
+- **Continue with:** [Agent mode](agent-mode-prompts.md) for the multi-step version,
+  then the README [guardrail model](../README.md#guardrails-and-execution-identity)
+  and [reviewed-fix validation flow](../README.md#apply-the-reviewed-fix-and-validate).
+- **For a live run:** use the condensed [one-page prompt sheet](ssms-demo-prompts.md)
+  and return here for explanation and expected output.
+
 > Tip: Open the regressed procedure (`Demo.usp_GetRegionalSalesByYear_Regressed`
 > or `Demo.usp_GetCustomerInvoiceSummary_Regressed`) before asking, so the
 > answers are grounded in the demo code.
 
-## If you're presenting this and you're *not* a DBA
+## How to use this stage
 
-Your job is **not** to write SQL live. It's to run the numbered scripts in order,
-paste the prompts below, and narrate the story. The whole demo lands in one
-sentence you can repeat:
+Run the numbered scripts in order, paste the prompts below, and compare Copilot's
+response with the Query Store and execution-plan evidence.
 
-> "A developer shipped a small change that made a query stop using its index.
-> Query Store caught it, and Copilot helps the DBA read the evidence and propose a
-> fix — but the DBA and SQL permissions stay in control."
+> **Core takeaway:** A small query change prevented index use. Query Store
+> captured the regression, and Copilot helps the DBA interpret the evidence and
+> propose a fix while the DBA and SQL permissions remain in control.
 
-Everything here is **read-only and reversible**, against an isolated demo
-database, so you can't break anything live.
+The intended flow is read-only and runs against an isolated demo database. Review
+all generated SQL and keep the query window connected to WideWorldImporters;
+SQL Server permissions remain the enforcement boundary.
 
 ## 2-minute SSMS orientation (where to click)
 
@@ -114,25 +127,25 @@ Review this index recommendation and tell me what else I should validate before 
 7. Use prompts **4 (partitioning)** and **5 (index)** to show Copilot reasoning
    from evidence instead of jumping to a fix.
 
-## What each prompt should produce (and what to say)
+## Expected output and DBA validation
 
 - **1 — Explain / spot concerns.** *Expect:* a summary plus the flag that
-  `YEAR(InvoiceDate) = @Year` is non-sargable and forces a scan. *Say:* "It found
-  the anti-pattern a DBA looks for, in seconds."
+  `YEAR(InvoiceDate) = @Year` is non-sargable and forces a scan. *Validation:*
+  confirm the anti-pattern in the procedure and execution plan.
 - **2 — Sargable rewrite.** *Expect:* a half-open date range
-  (`>= start AND < next start`), same logic. *Say:* "That's the exact fix we ship —
-  but we still verify it."
+  (`>= start AND < next start`), same logic. *Validation:* confirm equivalent
+  results, then compare runtime evidence.
 - **3 — Execution plan.** *Expect:* it points to a **scan** reading millions of
-  rows as the bottleneck. *Say:* "The plan is the receipt — it shows SQL reading
-  the whole table because of the function on the column."
+  rows as the bottleneck. *Validation:* confirm that the plan reads the whole
+  table because the function is applied to the filtered column.
 - **4 — Partitioning pushback.** *Expect:* it asks for row counts, access patterns,
-  retention/maintenance, and index alignment before recommending anything. *Say:*
-  "A senior asks for evidence instead of reflexively partitioning."
+  retention/maintenance, and index alignment before recommending anything.
+  *Decision point:* require evidence instead of reflexively partitioning.
 - **5 — Index validation.** *Expect:* it raises duplicate indexes, write/storage
-  overhead, and column order/selectivity. *Say:* "Indexes aren't free — every one
-  slows writes; it lists the checks first."
+  overhead, and column order/selectivity. *Decision point:* account for write and
+  storage cost before creating another index.
 
-## Glossary (say it this simply)
+## Glossary
 
 - **Index seek vs scan** — seek = jump to the rows you need (fast); scan = read
   every row (slow at 10M rows).
@@ -144,11 +157,12 @@ Review this index recommendation and tell me what else I should validate before 
 - **Execution plan** — the recipe SQL used to run the query (where seek vs scan is
   visible).
 
-## Likely questions from a DBA audience (crisp answers)
+## Likely DBA questions
 
-- **"Does Copilot run my query?"** In Ask mode it can run *read-only* queries to
-  answer, but can't modify data or schema. Suggested rewrites are text — you run
-  them.
+- **"Does Copilot run my query?"** Ask mode uses a read-only classification for
+  generated queries. Suggested rewrites are text for you to review and run. That
+  classification is a product safeguard, not a replacement for least-privilege
+  SQL permissions.
 - **"Under whose permissions?"** The login you connected SSMS with. We use a
   least-privilege login on purpose — SQL permissions are the real boundary.
 - **"How does it know our schema?"** From the connected database (plus any

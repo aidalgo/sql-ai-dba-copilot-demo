@@ -12,6 +12,12 @@ SET NOCOUNT ON;
 USE WideWorldImporters;
 GO
 
+IF NOT EXISTS (SELECT 1 FROM Demo.LargeInvoiceFact)
+BEGIN
+    THROW 51000, 'Demo.LargeInvoiceFact is empty. Run 02b-amplify-demo-data.sql before the workload.', 1;
+END;
+GO
+
 DECLARE @Iterations int = 25;            -- <-- raise for more Query Store samples
 DECLARE @RunLabel   nvarchar(100) = N'baseline';
 
