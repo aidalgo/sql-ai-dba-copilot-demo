@@ -269,7 +269,7 @@ activation models:
 | Object `AGENTS.md` | SSMS Ask and Agent modes | Business meaning and rules for a table, column, view, or procedure |
 | Agent skills in `SKILL.md` | SSMS Agent mode | Reusable task runbooks selected automatically from their descriptions |
 | MCP servers | SSMS Agent mode | Approved access to external tools and workflows |
-| Custom agents in `*.agent.md` | **VS Code only** | Named assistants with specialized instructions and tool lists |
+| Custom agents in `*.agent.md` | **VS Code only for now, but support is coming** | Named assistants with specialized instructions and tool lists |
 
 Running [15-install-copilot-constitution.sql](scripts/sql/15-install-copilot-constitution.sql)
 installs the database and object instructions. The body-only constitution leaves
